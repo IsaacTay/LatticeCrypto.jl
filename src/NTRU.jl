@@ -38,6 +38,13 @@ function encrypt(p::NTRU, arr, public_key)
 	return p.p  * public_key * r + ringify(arr, p.q, p.N)
 end
 
+function decrypt(p::NTRU, cipher, pri)
+	f, Fp = pri
+	a = map_coefficients((x) -> (k = lift(x); k <= p.q/2 ? k : k-p.q), lift(ringify(f, p.q, p.N) * cipher))
+	a_lift = change_base_ring(ResidueRing(ZZ, p.p), a)
+	b = Fp * a_lift
+	return data(b) |> coefficients |> collect
+end
 
 function T(d1, d2, N)
 	return Int.(shuffle!(vcat(ones(d1), -ones(d2), zeros(N - d1 - d2))))
