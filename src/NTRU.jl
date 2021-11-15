@@ -1,12 +1,13 @@
 using AbstractAlgebra
 using Random
+using ProgressMeter
 
 struct NTRU
 	N::Int
 	p::Int
 	q::Int
 	d::Int
-	function NTRU(; N = 64, p = 3, q = 41, d = 2)
+	function NTRU(; N = 67, p = 257, q = 18773, d = 12)
 		if gcd(p, q) !== 1
 			return error("Failed gcd(p, q) = 1 check")
 		elseif gcd(N, q) !== 1
@@ -19,14 +20,20 @@ struct NTRU
 end
 
 function generate_keys(p::NTRU)
+	prog = ProgressUnknown("Private Keys Tried: ");
 	while true
 		f = T(p.d, p.d+1, p.N)
 		Fp = Fq = Nothing
 		try
 			Fq = inv(ringify(f, p.q, p.N))
 			Fp = inv(ringify(f, p.p, p.N))
-		catch
-			continue
+		catch e
+			if isa(e, NotInvertibleError)
+				next!(prog; showvalues=[(:error, repr(e))])
+				continue
+			else
+				throw(e)
+			end
 		end
 		g = ringify(T(p.d, p.d, p.N), p.q, p.N);
 		return ((f, Fp), Fq * g)
