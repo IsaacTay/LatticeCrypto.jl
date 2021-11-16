@@ -1,6 +1,7 @@
 using AbstractAlgebra
 using Random
 using ProgressMeter
+using Base.Iterators
 
 struct NTRU
 	N::Int
@@ -45,12 +46,31 @@ function encrypt(p::NTRU, arr, public_key)
 	return p.p  * public_key * r + ringify(arr, p.q, p.N)
 end
 
+function encrypt(p::NTRU, text::String, public_key)
+	segment_size = p.N
+	text = Int.(codeunits(text))
+	#text = vcat(text, [0x00 for _ in 1:segment_size-(length(text)%segment_size)])
+	text = partition(text, segment_size) |> collect
+	text = Vector.(text)
+	r = ringify(T(p.d, p.d, p.N), p.q, p.N)
+	b = [p.p  * public_key * r] .+ ringify.(text, p.q, p.N)
+end
+
 function decrypt(p::NTRU, cipher, pri)
 	f, Fp = pri
-	a = map_coefficients((x) -> (k = lift(x); k <= p.q/2 ? k : k-p.q), lift(ringify(f, p.q, p.N) * cipher))
-	a_lift = change_base_ring(ResidueRing(ZZ, p.p), a)
-	b = Fp * a_lift
-	return data(b) |> coefficients |> collect
+	m = Array{UInt8}(undef, 0)
+	for cip in cipher
+		a = map_coefficients((x) -> (k = lift(x); k <= p.q/2 ? k : k-p.q), lift(ringify(f, p.q, p.N) * cip))
+		a_lift = change_base_ring(ResidueRing(ZZ, p.p), a)
+		b = Fp * a_lift
+		append!(m, UInt8.(lift.(data(b) |> coefficients |> collect)))
+	end
+	return (m
+		|> flatten
+		|> (x) -> Iterators.filter((y) -> y !== 0x00, x)
+		|> collect
+		|> String
+	)
 end
 
 function T(d1, d2, N)
@@ -62,3 +82,13 @@ function ringify(coefs, m, N)
     S = ResidueRing(R, x^N - 1)
 	return S(R(coefs))
 end
+
+function test()
+	params = NTRU()
+	pri, pub = generate_keys(params)
+	text = "Corporis ut ea quisquam molestiae impedit porro eos. Eveniet officiis veritatis excepturi ipsa eum qui quod aliquam. Quod voluptatem dolores magnam dolores sequi ipsa. Dolor voluptate autem odio culpa qui ea. Non voluptatem ducimus temporibus rerum nulla id."
+	cip = encrypt(params, text, pub)
+	decrypt(params, cip, pri)
+end
+
+test()
