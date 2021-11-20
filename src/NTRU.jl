@@ -61,7 +61,7 @@ function decrypt(p::NTRU, cipher, pri)
 	m = Array{UInt8}(undef, 0)
 	for cip in cipher
 		a = map_coefficients((x) -> (k = lift(x); k <= p.q/2 ? k : k-p.q), lift(ringify(f, p.q, p.N) * cip))
-		a_lift = change_base_ring(ResidueRing(ZZ, p.p), a)
+		a_lift = change_base_ring(ResidueRing(AbstractAlgebra.Integers{Int32}(), p.p), a)
 		b = Fp * a_lift
 		append!(m, UInt8.(lift.(data(b) |> coefficients |> collect)))
 	end
@@ -78,7 +78,8 @@ function T(d1, d2, N)
 end
 
 function ringify(coefs, m, N)
-	R, x = PolynomialRing(m == 0 ? ZZ : ResidueRing(ZZ, m), "x")
+	base = AbstractAlgebra.Integers{Int32}()
+	R, x = PolynomialRing(m == 0 ? base : ResidueRing(base, m), "x")
     S = ResidueRing(R, x^N - 1)
 	return S(R(coefs))
 end
