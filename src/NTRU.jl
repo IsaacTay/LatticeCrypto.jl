@@ -13,8 +13,8 @@ struct NTRU
 			return error("Failed gcd(p, q) = 1 check")
 		elseif gcd(N, q) !== 1
 			return error("Failed gcd(N, q) = 1 check")
-		elseif q <= (6d + 1)p
-			return error("Failed q > (6d + 1)p check")
+		# elseif q <= (6d + 1)p
+		# 	return error("Failed q > (6d + 1)p check")
 		end
 		return new(N, p, q, d)
 	end
