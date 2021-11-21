@@ -1,7 +1,9 @@
-using AbstractAlgebra
 using Random
 using ProgressMeter
 using Base.Iterators
+
+using AbstractAlgebra
+using Primes
 
 struct NTRU
 	N::Int
@@ -9,7 +11,11 @@ struct NTRU
 	q::Int
 	d::Int
 	function NTRU(; N = 67, p = 257, q = 18773, d = 12)
-		if gcd(p, q) !== 1
+		if !isprime(N)
+			return error("N needs to be prime")
+		elseif !isprime(p)
+			return error("p needs to be prime")
+		elseif gcd(p, q) !== 1
 			return error("Failed gcd(p, q) = 1 check")
 		elseif gcd(N, q) !== 1
 			return error("Failed gcd(N, q) = 1 check")
@@ -18,6 +24,14 @@ struct NTRU
 		end
 		return new(N, p, q, d)
 	end
+end
+
+function rand_NTRU(N_min, N_max, p_min, p_max, q_min, q_max, d_min, d_max)
+	N = rand(primes(N_min, N_max))
+	p = rand(primes(p_min, p_max))
+	q = rand(primes(q_min, q_max))
+	d = rand(d_min:d_max)
+	return NTRU(; N, p, q, d)
 end
 
 function generate_keys(p::NTRU)
@@ -42,8 +56,11 @@ function generate_keys(p::NTRU)
 end
 
 function encrypt(p::NTRU, arr, public_key)
+	segment_size = p.N
+	arr = partition(arr, segment_size)
+	arr = Vector.(arr)
 	r = ringify(T(p.d, p.d, p.N), p.q, p.N)
-	return p.p  * public_key * r + ringify(arr, p.q, p.N)
+	return map((x) -> p.p  * public_key * ringify(T(p.d, p.d, p.N), p.q, p.N) + ringify(x, p.q, p.N), arr)
 end
 
 function encrypt(p::NTRU, text::String, public_key)
@@ -56,12 +73,12 @@ function encrypt(p::NTRU, text::String, public_key)
 	b = [p.p  * public_key * r] .+ ringify.(text, p.q, p.N)
 end
 
-function decrypt(p::NTRU, cipher, pri)
+function decrypt_string(p::NTRU, cipher, pri)
 	f, Fp = pri
 	m = Array{UInt8}(undef, 0)
 	for cip in cipher
 		a = map_coefficients((x) -> (k = lift(x); k <= p.q/2 ? k : k-p.q), lift(ringify(f, p.q, p.N) * cip))
-		a_lift = change_base_ring(ResidueRing(AbstractAlgebra.Integers{Int32}(), p.p), a)
+		a_lift = change_base_ring(ResidueRing(AbstractAlgebra.Integers{Int}(), p.p), a)
 		b = Fp * a_lift
 		append!(m, UInt8.(lift.(data(b) |> coefficients |> collect)))
 	end
@@ -73,23 +90,39 @@ function decrypt(p::NTRU, cipher, pri)
 	)
 end
 
+function decrypt(p::NTRU, cipher, pri)
+	f, Fp = pri
+	m = Array{Int}(undef, 0)
+	for cip in cipher
+		a = map_coefficients((x) -> (k = lift(x); k <= p.q/2 ? k : k-p.q), lift(ringify(f, p.q, p.N) * cip))
+		a_lift = change_base_ring(ResidueRing(AbstractAlgebra.Integers{Int}(), p.p), a)
+		b = Fp * a_lift
+		append!(m, lift.(data(b) |> coefficients |> collect))
+	end
+	return (m
+		|> flatten
+		|> collect
+	)
+end
+
 function T(d1, d2, N)
 	return Int.(shuffle!(vcat(ones(d1), -ones(d2), zeros(N - d1 - d2))))
 end
 
 function ringify(coefs, m, N)
-	base = AbstractAlgebra.Integers{Int32}()
+	base = AbstractAlgebra.Integers{Int}()
 	R, x = PolynomialRing(m == 0 ? base : ResidueRing(base, m), "x")
     S = ResidueRing(R, x^N - 1)
 	return S(R(coefs))
 end
 
 function test()
-	params = NTRU()
+	params = rand_NTRU(2, 2^10, 256, 1024, 18773, 187730, 2, 12)
 	pri, pub = generate_keys(params)
-	text = "Corporis ut ea quisquam molestiae impedit porro eos. Eveniet officiis veritatis excepturi ipsa eum qui quod aliquam. Quod voluptatem dolores magnam dolores sequi ipsa. Dolor voluptate autem odio culpa qui ea. Non voluptatem ducimus temporibus rerum nulla id."
-	cip = encrypt(params, text, pub)
-	decrypt(params, cip, pri)
+	data = rand(0:params.p - 1, params.N)
+	cip = encrypt(params, data, pub)
+	data_out = decrypt(params, cip, pri)
+	return data_out == data
 end
 
 test()
