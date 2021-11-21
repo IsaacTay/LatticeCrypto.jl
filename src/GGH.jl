@@ -133,20 +133,19 @@ function LLL(v)
 	n = size(v, 2)
     v = getindex.([v], :, 1:n)
 	k = 2
-	v_star = [zeros(Int, size(v, 1)) for _ in 1:n]
+	v_star = [Vector{Float32}(undef, size(v, 1)) for _ in 1:n]
     v_star[1] = v[1]
-    for i in 2:n
-        v_star[i] = @views gs(v[i], v_star[1:i-1]...)
-    end
+	p = ProgressUnknown("LLL Reduction: "; spinner=true)
 	while k <= n
-        @show k
-		for j = k-1:-1:1
-			v[k] = @views gs(v[k], v_star[j])
-		end
+		update!(p; showvalues = [(:k, k)], spinner = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 		v_star[1] = v[1]
-        for i in 2:k
+        for i in max(k-1, 2):k
             v_star[i] = @views gs(v[i], v_star[1:i-1]...)
         end
+		for j = k-1:-1:1
+			v[k] = @views v[k] - round(Int, mew(v[k], v_star[j])) * v[j]
+		end
+		v_star[k] = @views gs(v[k], v_star[1:k-1]...)
         if @views norm(v_star[k])^2 >= (3/4 - mew(v[k], v_star[k-1])^2) * norm(v_star[k-1])^2
 			k = k + 1
 		else
@@ -154,6 +153,7 @@ function LLL(v)
 			k = max(k - 1, 2)
 		end
 	end
+	finish!(p)
 	return v
 end
 
@@ -162,12 +162,12 @@ function mew(vi, vj)
 end
 
 function gs(vi, vs...)
-    change = zeros(Int, size(vi))
-    for vj in vs
-        change += round(Int, mew(vi, vj)) * vj
+    change = [zeros(Float32, size(vi)) for _ in 1:length(vs)]
+    @threads for i in 1:length(vs)
+        change[i] += mew(vi, vs[i]) * vs[i]
     end
-    return vi - change
-    #return v1 - sum(@. ([v1] ⋅ vs))
+    return vi - sum(change)
+    # return vi - sum(@. mew.([vi], vs) .* vs)
 end
 
 function kgs(v1, v2)
@@ -184,3 +184,16 @@ function kgs(v1, v2)
         @show v1, v2, m * v1
 	end
 end
+
+function test_LLL()
+	M = [19 2 32 46 3 33;
+	15 42 11 0 3 24;
+	43 15 0 24 4 16;
+	20 44 44 0 18 15;
+	0 48 35 16 31 31;
+	48 33 32 9 1 29]'
+
+	return LLL(M)
+end
+
+test_LLL()
