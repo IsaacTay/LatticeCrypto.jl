@@ -1,4 +1,5 @@
 using LinearAlgebra
+using Base.Threads
 
 function hadamard_ratio(m)
 	d = size(m, 2)
