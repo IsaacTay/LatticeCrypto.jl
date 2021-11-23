@@ -20,7 +20,6 @@ function encrypt(text::String, public_key, delta = 1)
 	return out
 end
 
-
 function encrypt(arr, public_key, delta = 1)
 	segment_size = size(public_key, 2)
 	arr = vcat(arr, [0x00 for _ in 1:segment_size-(length(arr)%segment_size)])
@@ -50,36 +49,37 @@ end
 
 function generate_keys(n, d=100)
 	@assert n > 0
-	#private_key = Matrix{Int}(undef, n, n)
-    best_key = [rand(vcat(1:d, -1:-1:-d), n) for _ in 1:n]
-	best_ratio = hadamard_ratio(hcat(best_key...))
-	p = ProgressUnknown("Private Keys Tried:");
+	sqrt_n = sqrt(n)
+	k = 10
+	private_key = Matrix{BigInt}(undef, n, n)
+    p = ProgressUnknown("Private Keys Tried:");
 	r = vcat(1:d, -1:-1:-d)
     while true
 		temp = [rand(r, n) for _ in 1:n]
-		gs_temp = Vector{Vector{Int}}(undef, n)
-		gs_best = Vector{Vector{Int}}(undef, n)
-		gs_temp[1] = @views deepcopy(temp[1])
-		gs_best[1] = @views deepcopy(best_key[1])
-        for i in 2:n
-            gs_temp[i] = @views gs(temp[i], gs_temp[1:i-1]...)
-			gs_best[i] = @views gs(best_key[i], gs_best[1:i-1]...)
-        end
-		ratios = [(temp, hadamard_ratio(hcat(temp...))), (gs_temp, hadamard_ratio(hcat(gs_temp...))), (gs_best, hadamard_ratio(hcat(gs_best...))), (best_key, best_ratio)]
-		best_index = (i[2] for i in ratios) |> collect |> argmax 
-		best_key, best_ratio = ratios[best_index]
-		0.9 < best_ratio <= 1 && break
-		next!(p; showvalues = [(:ratio, best_ratio)])
+		temp_star = [Vector{Float32}(undef, n) for _ in 1:n]
+		temp_star[1] = temp[1]
+		for i = 2:n
+			temp_star[i] = @views gs(temp[i], temp_star[1:i-1]...)
+		end
+		for i in 1:n
+			temp[i] = round.(Int, (sqrt_n*10^k / norm(temp_star[i])) .* temp_star[i])
+		end
+		private_key = hcat(temp...)
+		ratio = hadamard_ratio(private_key)
+		0.9 < ratio < 1 && break
+		next!(p; showvalues = [(:ratio, ratio)])
 		# hadamard_ratio(private_key) < 0.9 || hadamard_ratio(private_key) > 1 || break
 	end
-	private_key = hcat(best_key...)
 	
-	unimod = public_key = Matrix{Int}(undef, n, n)
+	p = ProgressUnknown("Unimodular Matrices Tried:");
+	unimod = public_key = Matrix{BigInt}(undef, n, n)
 	while true
 		unimod = rand_unimod(n)
 		public_key = unimod * private_key
-		0.00001 <= hadamard_ratio(public_key) < 0.1 && break
+		ratio = hadamard_ratio(public_key)
+		0.001 < ratio < 0.1 && break
 		# hadamard_ratio(public_key) > 0.1 || hadamard_ratio(public_key) < 0.000001 || break
+		next!(p; showvalues = [(:ratio, ratio)])
 	end
 	return private_key, public_key, unimod
 end
@@ -104,7 +104,7 @@ end
 function test_consistency(n = 3, d = 10000)
 	success = zeros(Bool, d)
 	p = Progress(d)
-	@threads for i in 1:d
+	for i in 1:d
 		success[i] = test_ggh(n)
 		next!(p)
 	end
@@ -113,7 +113,7 @@ end
 
 function test_ggh(n = 3)
 	text = "Corporis ut ea quisquam molestiae impedit porro eos. Eveniet officiis veritatis excepturi ipsa eum qui quod aliquam. Quod voluptatem dolores magnam dolores sequi ipsa. Dolor voluptate autem odio culpa qui ea. Non voluptatem ducimus temporibus rerum nulla id."
-	text = text^10000
+	# text = text^10000
 	pri, pub, uni = generate_keys(n)
 	cipher_arr = encrypt(text, pub)
 	decrypt_text = ""
@@ -121,10 +121,10 @@ function test_ggh(n = 3)
 	try
 		decrypt_text = decrypt(cipher_arr, pri, uni)
 	catch e
-		@show pri, pub
+		# @show pri, pub, uni
 		return false
 	end
-	decrypt_text == text || @show pub, uni
+	# decrypt_text == text
 	return decrypt_text == text
 end
 
@@ -196,4 +196,4 @@ function test_LLL()
 	return LLL(M)
 end
 
-test_LLL()
+test_ggh(3)
