@@ -1,6 +1,8 @@
 using LinearAlgebra
 using Base.Threads
 
+using ProgressMeter
+
 function hadamard_ratio(m)
 	d = size(m, 2)
 	return (abs(det(BigInt.(m))) / prod(norm.(view.([m], :, 1:d))))^(1/d)
