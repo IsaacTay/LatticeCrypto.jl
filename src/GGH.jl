@@ -44,7 +44,7 @@ function rand(params::Params{GGH}; d = 100)
 		temp_star = [Vector{Float32}(undef, n) for _ in 1:n]
 		temp_star[1] = temp[1]
 		for i = 2:n
-			temp_star[i] = @views gs_ortho(temp[i], temp_star[1:i-1]...)
+			temp_star[i] = @views gs_ortho(temp[i], temp_star[1:i-1])
 		end
 		for i in 1:n
 			temp[i] = round.(Int, (sqrt_n*10^k / norm(temp_star[i])) .* temp_star[i])

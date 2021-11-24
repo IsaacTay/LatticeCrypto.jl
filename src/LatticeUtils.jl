@@ -13,10 +13,10 @@ function mew(vi, vj)
 end
 
 # Gram–Schmidt Orthogonal Basis
-function gs_ortho(vi, vs...)
-    change = [zeros(Float32, size(vi)) for _ in 1:length(vs)]
+function gs_ortho(vi, vs)
+    change = [Vector{Float64}(undef, size(vi)) for _ in 1:length(vs)]
     @threads for i in 1:length(vs)
-        change[i] += mew(vi, vs[i]) * vs[i]
+        change[i] = mew(vi, vs[i]) * vs[i]
     end
     return vi - sum(change)
     # return vi - sum(@. mew.([vi], vs) .* vs)
@@ -42,27 +42,29 @@ function LLL(v)
 	n = size(v, 2)
     v = getindex.([v], :, 1:n)
 	k = 2
-	v_star = [Vector{Float32}(undef, size(v, 1)) for _ in 1:n]
+	v_star = [Vector{Float64}(undef, size(v, 1)) for _ in 1:n]
     v_star[1] = v[1]
 	p = ProgressUnknown("LLL Reduction: "; spinner=true)
+    count = 0
 	while k <= n
 		update!(p; showvalues = [(:k, k)], spinner = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 		v_star[1] = v[1]
         for i in max(k-1, 2):k
-            v_star[i] = @views gs_ortho(v[i], v_star[1:i-1]...)
+            v_star[i] = @views gs_ortho(v[i], v_star[1:i-1])
         end
 		for j = k-1:-1:1
 			v[k] = @views v[k] - round(Int, mew(v[k], v_star[j])) * v[j]
 		end
-		v_star[k] = @views gs_ortho(v[k], v_star[1:k-1]...)
+		v_star[k] = @views gs_ortho(v[k], v_star[1:k-1])
         if @views norm(v_star[k])^2 >= (3/4 - mew(v[k], v_star[k-1])^2) * norm(v_star[k-1])^2
 			k = k + 1
 		else
+            count += 1
 			v[k-1], v[k] = v[k], v[k-1]
 			k = max(k - 1, 2)
 		end
 	end
-	finish!(p)
+	finish!(p; showvalues = [(:steps, count)])
 	return v
 end
 
@@ -79,4 +81,25 @@ function test_LLL()
 	return LLL(M)
 end
 
+# function test_NTRU_LLL()
+    M = [1 0 0 0 0 0 0 30 26 8 38 2 40 20 ;
+    0 1 0 0 0 0 0 20 30 26 8 38 2 40 ;
+    0 0 1 0 0 0 0 40 20 30 26 8 38 2 ;
+    0 0 0 1 0 0 0 2 40 20 30 26 8 38;
+    0 0 0 0 1 0 0 38 2 40 20 30 26 8 ;
+    0 0 0 0 0 1 0 8 38 2 40 20 30 26 ;
+    0 0 0 0 0 0 1 26 8 38 2 40 20 30 ;
+    0 0 0 0 0 0 0 41 0 0 0 0 0 0 ;
+    0 0 0 0 0 0 0 0 41 0 0 0 0 0 ;
+    0 0 0 0 0 0 0 0 0 41 0 0 0 0 ;
+    0 0 0 0 0 0 0 0 0 0 41 0 0 0 ;
+    0 0 0 0 0 0 0 0 0 0 0 41 0 0 ;
+    0 0 0 0 0 0 0 0 0 0 0 0 41 0 ;
+    0 0 0 0 0 0 0 0 0 0 0 0 0 41 ]'
+
+#     @show hadamard_ratio(M), hadamard_ratio(hcat(LLL(M)...))
+#     return LLL(M)
+# end
+
 # test_LLL()
+# test_NTRU_LLL(
